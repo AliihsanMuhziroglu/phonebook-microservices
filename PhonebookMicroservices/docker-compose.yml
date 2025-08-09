@@ -1,0 +1,73 @@
+version: '3.9'
+name: phonebook-stack
+services:
+  postgres:
+    image: bitnami/postgresql:16
+    container_name: pb-postgres
+    environment:
+      - POSTGRESQL_USERNAME=${POSTGRES_USER}
+      - POSTGRESQL_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRESQL_DATABASE=${POSTGRES_DB}
+    ports: ["5432:5432"]
+    volumes: [pgdata:/bitnami/postgresql]
+    healthcheck:
+      test: ["CMD","pg_isready","-U","${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: bitnami/zookeeper:3.9
+    container_name: pb-zookeeper
+    environment: ["ALLOW_ANONYMOUS_LOGIN=yes"]
+    ports: ["2181:2181"]
+
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: pb-kafka
+    depends_on: [zookeeper]
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    ports: ["9092:9092"]
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: pb-kafka-ui
+    depends_on: [kafka]
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+    ports: ["8080:8080"]
+
+  contactservice:
+    build: { context: ./src/ContactService, dockerfile: Dockerfile }
+    container_name: pb-contact
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8081
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      - Kafka__BootstrapServers=kafka:9092
+    ports: ["8081:8081"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_started }
+
+  reportservice:
+    build: { context: ./src/ReportService, dockerfile: Dockerfile }
+    container_name: pb-report
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8082
+      - Kafka__BootstrapServers=kafka:9092
+      - Services__ContactBaseUrl=http://contactservice:8081
+    ports: ["8082:8082"]
+    depends_on:
+      kafka: { condition: service_started }
+      contactservice: { condition: service_started }
+
+volumes:
+  pgdata:
