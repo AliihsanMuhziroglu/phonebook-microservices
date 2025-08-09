@@ -44,7 +44,7 @@ services:
     ports: ["8080:8080"]
 
   contactservice:
-    build: { context: ./src/ContactService, dockerfile: Dockerfile }
+    build: { context: ./ContactService, dockerfile: Dockerfile }
     container_name: pb-contact
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
@@ -57,7 +57,7 @@ services:
       kafka: { condition: service_started }
 
   reportservice:
-    build: { context: ./src/ReportService, dockerfile: Dockerfile }
+    build: { context: ./ReportService, dockerfile: Dockerfile }
     container_name: pb-report
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
