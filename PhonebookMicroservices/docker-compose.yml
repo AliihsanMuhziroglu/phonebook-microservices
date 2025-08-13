@@ -11,7 +11,7 @@ services:
     ports: ["5432:5432"]
     volumes: [pgdata:/bitnami/postgresql]
     healthcheck:
-      test: ["CMD","pg_isready","-U","${POSTGRES_USER}"]
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -19,7 +19,8 @@ services:
   zookeeper:
     image: bitnami/zookeeper:3.9
     container_name: pb-zookeeper
-    environment: ["ALLOW_ANONYMOUS_LOGIN=yes"]
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
     ports: ["2181:2181"]
 
   kafka:
@@ -33,18 +34,41 @@ services:
       - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
       - ALLOW_PLAINTEXT_LISTENER=yes
     ports: ["9092:9092"]
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka-init:
+    image: bitnami/kafka:3.7
+    container_name: pb-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command:
+      - bash
+      - -c
+      - |
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic report-requests --partitions 1 --replication-factor 1
+        echo "report-requests topic ready"
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: pb-kafka-ui
-    depends_on: [kafka]
+    depends_on:
+      kafka:
+        condition: service_healthy
     environment:
       - KAFKA_CLUSTERS_0_NAME=local
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
     ports: ["8080:8080"]
 
   contactservice:
-    build: { context: ./ContactService, dockerfile: Dockerfile }
+    build:
+      context: ./ContactService
+      dockerfile: Dockerfile
     container_name: pb-contact
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
@@ -53,21 +77,32 @@ services:
       - Kafka__BootstrapServers=kafka:9092
     ports: ["8081:8081"]
     depends_on:
-      postgres: { condition: service_healthy }
-      kafka: { condition: service_started }
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
 
   reportservice:
-    build: { context: ./ReportService, dockerfile: Dockerfile }
+    build:
+      context: ./ReportService
+      dockerfile: Dockerfile
     container_name: pb-report
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8082
       - Kafka__BootstrapServers=kafka:9092
       - Services__ContactBaseUrl=http://contactservice:8081
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      - ENABLE_WORKER=false
     ports: ["8082:8082"]
     depends_on:
-      kafka: { condition: service_started }
-      contactservice: { condition: service_started }
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      contactservice:
+        condition: service_started
+    restart: on-failure
 
 volumes:
   pgdata:

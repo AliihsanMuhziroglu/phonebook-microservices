@@ -81,6 +81,29 @@ namespace ContactService
                 return Results.NoContent();
             });
 
+            // Tüm kiþileri iletiþim bilgileriyle ver (rapor için)
+            people.MapGet("/full", async (AppDbContext db) =>
+            {
+                var data = await db.Persons
+                    .Include(p => p.ContactInfos)
+                    .AsNoTracking()
+                    .Select(p => new {
+                        p.UUID,
+                        p.FirstName,
+                        p.LastName,
+                        p.Company,
+                        ContactInfos = p.ContactInfos.Select(ci => new {
+                            ci.UUID,
+                            Type = ci.Type.ToString(), // Worker string bekliyor
+                            ci.Value
+                        }).ToList()
+                    })
+                    .ToListAsync();
+
+                return Results.Ok(data);
+            });
+
+
             app.Run();
         }
     }

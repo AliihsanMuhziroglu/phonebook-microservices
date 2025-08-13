@@ -1,0 +1,8 @@
+services:
+  reportservice:
+    build: .
+    container_name: pb-report
+    environment:
+      ConnectionStrings__Postgres: Host=host.docker.internal;Database=phonebook;Username=postgres;Password=postgres
+    ports:
+      - "8082:8082"

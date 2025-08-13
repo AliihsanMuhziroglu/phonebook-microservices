@@ -1,12 +1,19 @@
 ﻿FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
-COPY *.csproj ./
-RUN dotnet restore
-COPY . .
-RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
 
+# Proje dosyalarını kopyala
+COPY . .
+
+# Restore ve publish
+RUN dotnet restore
+RUN dotnet publish -c Release -o /app
+
+# Runtime imajı
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
-COPY --from=build /app/publish .
+COPY --from=build /app .
+
+# 8082 portunu aç
 EXPOSE 8082
-ENTRYPOINT ["dotnet","ReportService.dll"]
+
+ENTRYPOINT ["dotnet", "ReportService.dll"]
